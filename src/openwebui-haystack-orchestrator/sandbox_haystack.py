@@ -1,4 +1,3 @@
-import sys
 from haystack import Pipeline
 from haystack.components.builders import PromptBuilder
 from haystack_integrations.components.generators.ollama import OllamaGenerator
