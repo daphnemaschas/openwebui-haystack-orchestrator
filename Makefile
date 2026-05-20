@@ -40,3 +40,11 @@ start-api:
 
 start-streamlit-app:
 	uv run streamlit run "src/streamlit_app/🏠_Home_page.py"
+
+
+########################################################################################################################
+# OpenWebUI
+########################################################################################################################
+
+start-app-local:
+	uv run uvicorn src.openwebui-haystack-orchestrator.main:app --port 1416 --reload
