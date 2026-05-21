@@ -1,0 +1,25 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  orchestrator:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_URL: "http://host.docker.internal:11434"
+      QDRANT_HOST: "qdrant"
+      QDRANT_PORT: "6333"
+      QDRANT_INDEX: "ceseda_collection"
+      EMBEDDING_DIM: "384"
+      MAX_TOOL_STEPS: "2"
+      TOOLS_MAX_DOCS: "3"
+    depends_on:
+      - qdrant
+
+volumes:
+  qdrant_data:

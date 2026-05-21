@@ -32,7 +32,13 @@ type-check:
 ########################################################################################################################
 
 start-api:
-	docker compose up -d
+	uv run uvicorn main:app --reload --port 8000
+
+start-api-docker:
+	docker compose up --build
+
+stop-api-docker:
+	docker compose down
 
 ########################################################################################################################
 # Streamlit
@@ -46,5 +52,29 @@ start-streamlit-app:
 # OpenWebUI
 ########################################################################################################################
 
-start-app-local:
-	uv run uvicorn src.openwebui-haystack-orchestrator.main:app --port 1416 --reload
+start-backend:
+	@echo "Lancement de l'API orchestrateur sur le port 8000..."
+	uv run uvicorn main:app --reload --port 8000
+
+start-hayhooks:
+	@echo "Lancement de Hayhooks + Chainlit UI sur le port 1416..."
+	uv run hayhooks run --port 1416 --pipelines-dir ./pipelines --with-chainlit
+
+start-ui:
+	@echo "Vérification et lancement d'OpenWebUI sur http://localhost:3000..."
+	@docker ps -a --format '{{.Names}}' | grep -q '^open-webui$$' && \
+		(docker ps --format '{{.Names}}' | grep -q '^open-webui$$' || docker start open-webui) || \
+		docker run -d -p 3000:8080 --add-host=host.docker.internal:host-gateway -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
+	@echo "OpenWebUI est prêt !"
+
+stop-ui:
+	@echo "Arrêt du conteneur OpenWebUI..."
+	docker stop open-webui
+
+logs-ui:
+	docker logs -f open-webui
+
+dev: start-ui start-backend
+
+index-docs:
+	uv run python src/openwebui-haystack-orchestrator/index_documents.py

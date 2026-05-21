@@ -1,0 +1,49 @@
+components:
+  text_embedder:
+    type: haystack_integrations.components.embedders.fastembed.fastembed_text_embedder.FastembedTextEmbedder
+
+  retriever:
+    type: haystack_integrations.components.retrievers.qdrant.retriever.QdrantEmbeddingRetriever
+    init_parameters:
+      document_store:
+        type: haystack_integrations.document_stores.qdrant.document_store.QdrantDocumentStore
+        init_parameters:
+          host: "localhost"
+          port: 6333
+          index: "ceseda_collection"
+          embedding_dim: 384
+      top_k: 2
+
+  prompter:
+    type: haystack.components.builders.prompt_builder.PromptBuilder
+    init_parameters:
+      template: |
+        Tu es un assistant juridique expert en droit des étrangers (CESEDA).
+        Utilise UNIQUEMENT les documents fournis pour répondre à la question de manière précise et factuelle.
+        Si la réponse n'est pas dans les documents, dis simplement que tu ne sais pas.
+
+        Documents pertinents :
+        {% for doc in documents %}
+        - {{ doc.content }}
+        {% endfor %}
+
+        Question : {{ question }}
+        Réponse :
+
+  llm:
+    type: haystack_integrations.components.generators.ollama.chat.chat_generator.OllamaChatGenerator
+    init_parameters:
+      model: "gemma4:e2b"
+      url: "http://localhost:11434"
+      generation_kwargs:
+        temperature: 0.1
+
+connections:
+  - sender: text_embedder.embedding
+    receiver: retriever.query_embedding
+
+  - sender: retriever.documents
+    receiver: prompter.documents
+
+  - sender: prompter.prompt
+    receiver: llm.messages

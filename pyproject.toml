@@ -6,7 +6,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.136.1",
+    "fastembed-haystack>=2.3.0",
+    "hayhooks[chainlit]>=1.19.1",
     "haystack-ai>=2.29.0",
+    "loguru>=0.7.3",
     "ollama>=0.6.2",
     "ollama-haystack>=6.3.0",
     "pytest>=9.0.3",
