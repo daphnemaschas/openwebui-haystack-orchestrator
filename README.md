@@ -1,50 +1,26 @@
-## Mymirai agentic orchestrator (Haystack + Ollama)
+## OpenWebUI + Ollama (pipe local)
 
-This repo hosts a small agentic orchestrator that runs inside this codebase, without relying on the OpenWebUI backend
-for LLM responses. It uses Haystack + Ollama, and exposes a `/chat` API.
+This repo keeps a single OpenWebUI pipe that forwards chat messages to Ollama.
+There is no separate API server or Haystack pipeline.
 
 ### Requirements
 
-- Python 3.11+
 - Ollama running locally (default: http://localhost:11434)
-- Qdrant (optional but recommended for RAG)
+- Docker (for OpenWebUI)
 
-### Quick start (local)
-
-```bash
-uv sync
-uv run python src/openwebui-haystack-orchestrator/index_documents.py
-uv run uvicorn main:app --reload --port 8000
-```
-
-Then call the API:
+### Quick start
 
 ```bash
-curl -sS http://localhost:8000/chat \
-	-H 'Content-Type: application/json' \
-	-d '{"messages":[{"role":"user","content":"Quels sont les conditions de renouvellement ?"}]}'
+docker compose up -d
 ```
 
-### Docker compose
+Then open http://localhost:3000 and use the OpenWebUI pipe.
 
-```bash
-docker compose up --build
-```
+### Configuration
 
-### Configuration (.env)
-
-Copy `.env.example` to `.env` and adjust as needed:
+The pipe reads these environment variables (from the OpenWebUI container):
 
 - `OLLAMA_URL` (default: http://localhost:11434)
 - `OLLAMA_MODEL` (default: gemma4:e2b)
-- `QDRANT_HOST` (default: localhost)
-- `QDRANT_PORT` (default: 6333)
-- `QDRANT_INDEX` (default: ceseda_collection)
-- `EMBEDDING_DIM` (default: 384)
-- `DATA_DIR` (default: data)
 
-### Tools included
-
-- `rag_search`: semantic search in Qdrant index
-- `keyword_search`: keyword search in local `data/` files
-- `calculator`: basic arithmetic evaluation
+You can change them in [docker-compose.yml](docker-compose.yml).

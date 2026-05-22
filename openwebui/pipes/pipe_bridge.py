@@ -1,27 +1,30 @@
-import importlib.util
-import sys
-from pathlib import Path
+import os
 from typing import Optional
 
-from loguru import logger
+import ollama
+
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 class Pipe:
-    def __init__(self):
-        pass
-        
+    def __init__(self) -> None:
+        self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "gemma4:e2b")
+        self.client = ollama.Client(host=self.ollama_url)
+
     def pipe(self, body: dict, __user__: Optional[dict] = None) -> str:
-        user_query = body["messages"][-1]["content"]
+        messages = body.get("messages", [])
+        if not messages:
+            return "Missing messages in request."
 
         try:
-            root = Path(__file__).resolve().parents[3]
-            wrapper_path = root / "src" / "openwebui-haystack-orchestrator" / "pipeline_wrappers.py"
-            spec = importlib.util.spec_from_file_location("pipeline_wrappers_local", str(wrapper_path))
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = module
-            spec.loader.exec_module(module)
+            response = self.client.chat(model=self.ollama_model, messages=messages)
+        except Exception as exc:
+            logger.exception("Ollama chat failed")
+            return f"Ollama error: {exc}"
 
-            run_agentic_reply = getattr(module, "run_agentic_reply")
-            return run_agentic_reply(user_query)
-        except Exception as e:
-            logger.error("Local agentic pipeline failed: {}", e)
-            return f"Local agentic pipeline error: {e}"
+        message = response.get("message", {})
+        content = message.get("content")
+        return content or ""
