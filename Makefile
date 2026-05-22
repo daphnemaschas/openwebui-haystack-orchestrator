@@ -3,7 +3,7 @@
 ########################################################################################################################
 
 install:
-	pip install -r requirements.txt
+	uv sync
 
 ########################################################################################################################
 # OpenWebUI
@@ -34,8 +34,8 @@ restart-ui:
 
 ingest-file:
 	@if [ -z "$(FILE)" ]; then echo "Usage: make ingest-file FILE=data/rapport.txt [TITLE=...]"; exit 1; fi
-	python -c 'import os; from src.tools.qdrant_rag_tool import run; print(run(action="ingest", file_path=os.environ.get("FILE"), title=os.environ.get("TITLE")))'
+	uv run python -c 'import os; from src.tools.qdrant_rag_tool import run; print(run(action="ingest", file_path=os.environ.get("FILE"), title=os.environ.get("TITLE")))'
 
 search-rag:
 	@if [ -z "$(QUERY)" ]; then echo "Usage: make search-rag QUERY='...'"; exit 1; fi
-	python -c 'import os; from src.tools.qdrant_rag_tool import run; print(run(action="search", query=os.environ.get("QUERY"), top_k=int(os.environ.get("TOP_K", "3"))))'
+	uv run python -c 'import os; from src.tools.qdrant_rag_tool import run; print(run(action="search", query=os.environ.get("QUERY"), top_k=int(os.environ.get("TOP_K", "3"))))'
