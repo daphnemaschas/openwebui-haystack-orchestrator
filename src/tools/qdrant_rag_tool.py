@@ -1,17 +1,37 @@
 import json
 import os
+from pathlib import Path
 import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Iterable, List, Optional
 
-from .config import DEFAULT_COLLECTION, DEFAULT_EMBED_MODEL, get_env
+DEFAULT_COLLECTION = "datagouv_reports"
+DEFAULT_EMBED_MODEL = "nomic-embed-text"
+
+def get_env(name: str, default: str) -> str:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return value
 
 
 def _post_json(url: str, payload: dict, timeout: int = 30) -> dict:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _put_json(url: str, payload: dict, timeout: int = 30) -> dict:
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="PUT",
+    )
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -24,7 +44,23 @@ def _get_json(url: str, timeout: int = 20) -> dict:
 def _ollama_embed(text: str, ollama_url: str, model: str) -> List[float]:
     url = f"{ollama_url.rstrip('/')}/api/embeddings"
     payload = {"model": model, "prompt": text}
-    result = _post_json(url, payload)
+    try:
+        result = _post_json(url, payload)
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+        if exc.code == 404:
+            raise RuntimeError(
+                f"Ollama model '{model}' not found. Pull an embedding model first, for example: ollama pull {model}"
+            ) from exc
+        if exc.code == 500 and "does not support embeddings" in body.lower():
+            raise RuntimeError(
+                f"Ollama model '{model}' does not support embeddings. Set OLLAMA_EMBED_MODEL to a dedicated embedding model such as 'nomic-embed-text'."
+            ) from exc
+        raise RuntimeError(f"Ollama embeddings request failed ({exc.code}): {body or exc.reason}") from exc
     embedding = result.get("embedding")
     if not isinstance(embedding, list):
         raise ValueError("Missing embedding in Ollama response")
@@ -46,7 +82,7 @@ def _ensure_collection(qdrant_url: str, collection: str, vector_size: int) -> No
             "distance": "Cosine",
         }
     }
-    _post_json(url, payload)
+    _put_json(url, payload)
 
 
 def _chunk_text(text: str, max_chars: int = 1200) -> Iterable[str]:
@@ -79,7 +115,24 @@ def _fetch_source_text(source_url: str, max_chars: int = 200000) -> str:
 
 
 def _read_local_file(file_path: str, max_chars: int = 200000) -> str:
-    with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
+    path = Path(file_path)
+    if path.suffix.lower() == ".pdf":
+        try:
+            from pypdf import PdfReader
+        except ImportError as exc:
+            raise RuntimeError(
+                "PDF ingestion requires the 'pypdf' package. Run 'uv sync' to install dependencies."
+            ) from exc
+
+        reader = PdfReader(str(path))
+        pages_text = []
+        for page in reader.pages:
+            extracted = page.extract_text() or ""
+            if extracted.strip():
+                pages_text.append(extracted)
+        return "\n".join(pages_text)[:max_chars]
+
+    with open(path, "r", encoding="utf-8", errors="replace") as handle:
         return handle.read(max_chars)
 
 
@@ -116,11 +169,14 @@ def run(
     if action == "search":
         if not query:
             return "Missing query for search."
-        embedding = _ollama_embed(query, ollama_url, embed_model)
+        try:
+            embedding = _ollama_embed(query, ollama_url, embed_model)
+        except Exception as exc:
+            return f"Failed to create search embedding: {exc}"
         _ensure_collection(qdrant_url, collection, len(embedding))
 
         search_url = f"{qdrant_url.rstrip('/')}/collections/{urllib.parse.quote(collection)}/points/search"
-        payload = {"vector": embedding, "limit": int(top_k)}
+        payload = {"vector": embedding, "limit": int(top_k), "with_payload": True}
         result = _post_json(search_url, payload)
         hits = result.get("result", [])
         if not hits:
@@ -154,12 +210,18 @@ def run(
     if not chunks:
         return "No usable text chunks."
 
-    embedding = _ollama_embed(chunks[0], ollama_url, embed_model)
+    try:
+        embedding = _ollama_embed(chunks[0], ollama_url, embed_model)
+    except Exception as exc:
+        return f"Failed to create embeddings: {exc}"
     _ensure_collection(qdrant_url, collection, len(embedding))
 
     points = []
     for chunk in chunks:
-        vector = _ollama_embed(chunk, ollama_url, embed_model)
+        try:
+            vector = _ollama_embed(chunk, ollama_url, embed_model)
+        except Exception as exc:
+            return f"Failed to create embeddings: {exc}"
         points.append(
             {
                 "id": str(uuid.uuid4()),
@@ -172,7 +234,7 @@ def run(
         )
 
     upsert_url = f"{qdrant_url.rstrip('/')}/collections/{urllib.parse.quote(collection)}/points?wait=true"
-    _post_json(upsert_url, {"points": points}, timeout=60)
+    _put_json(upsert_url, {"points": points}, timeout=60)
     return f"Ingested {len(points)} chunks into {collection}."
 
 
@@ -201,5 +263,13 @@ class Tools:
         top_k: int = 3,
         collection: str = DEFAULT_COLLECTION,
     ) -> str:
-        """Search ingested reports in Qdrant using an Ollama embedding query."""
+        """
+        CRITICAL: ALWAYS use this tool when the user asks a question about the CESEDA, immigration laws, ANEF, or residence cards (cartes de résident).
+        This tool searches the official legal database (Qdrant) which already contains all the necessary reports.
+        
+        Args:
+            query: The specific question to search for (e.g., "motif ANEF renouvellement carte de résident").
+            top_k: Number of results to return (default to 3).
+            collection: Leave as default unless specified.
+        """
         return run(action="search", query=query, top_k=top_k, collection=collection)
