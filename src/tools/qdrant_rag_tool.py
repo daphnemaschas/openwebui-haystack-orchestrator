@@ -224,6 +224,14 @@ def _chunk_text(text: str, max_chars: int = 1200) -> Iterable[str]:
     return chunks
 
 
+def _keyword_score(query: str, text: str) -> int:
+    terms = [t for t in query.lower().split() if len(t) > 2]
+    if not terms:
+        return 0
+    haystack = text.lower()
+    return sum(1 for t in terms if t in haystack)
+
+
 def _fetch_source_text(source_url: str, max_chars: int = 200000) -> str:
     with urllib.request.urlopen(source_url, timeout=30) as response:
         content = response.read().decode("utf-8", errors="replace")
@@ -260,6 +268,7 @@ def run(
     text: Optional[str] = None,
     title: Optional[str] = None,
     top_k: int = 3,
+    min_score: Optional[float] = None,
     collection: str = DEFAULT_COLLECTION,
 ) -> str:
     """Upload reports to Qdrant or search them using Ollama embeddings.
@@ -272,6 +281,7 @@ def run(
         text: Raw text to ingest (optional for ingest).
         title: Optional title stored in metadata.
         top_k: Number of results for search.
+        min_score: Optional Qdrant score threshold.
         collection: Qdrant collection name.
     """
     qdrant_url = _resolve_qdrant_url()
@@ -292,18 +302,26 @@ def run(
         _ensure_collection(qdrant_url, collection, len(embedding))
 
         search_url = f"{qdrant_url.rstrip('/')}/collections/{urllib.parse.quote(collection)}/points/search"
-        payload = {"vector": embedding, "limit": int(top_k), "with_payload": True}
+        payload = {"vector": embedding, "limit": int(max(10, top_k)), "with_payload": True}
+        if min_score is not None:
+            payload["score_threshold"] = float(min_score)
         result = _post_json(search_url, payload)
         hits = result.get("result", [])
         if not hits:
             return "No matches."
-        lines = []
+        reranked = []
         for hit in hits:
             payload = hit.get("payload", {})
-            snippet = payload.get("text") or ""
-            if len(snippet) > 300:
-                snippet = snippet[:300] + "..."
-            lines.append(f"- {payload.get('title', 'document')} :: {snippet}")
+            text = payload.get("text") or ""
+            score = _keyword_score(query, text)
+            reranked.append((score, hit))
+
+        reranked.sort(key=lambda item: item[0], reverse=True)
+        lines = []
+        for score, hit in reranked[:top_k]:
+            payload = hit.get("payload", {})
+            text = payload.get("text") or ""
+            lines.append(f"- {payload.get('title', 'document')} :: {text}")
         return "\n".join(lines)
 
     if not any([source_url, file_path, text]):
@@ -387,6 +405,7 @@ class Tools:
         self,
         query: str,
         top_k: int = 3,
+        min_score: Optional[float] = None,
         collection: str = DEFAULT_COLLECTION,
     ) -> str:
         """
@@ -396,6 +415,13 @@ class Tools:
         Args:
             query: The specific question to search for (e.g., "motif ANEF renouvellement carte de résident").
             top_k: Number of results to return (default to 3).
+            min_score: Optional Qdrant score threshold.
             collection: Leave as default unless specified.
         """
-        return run(action="search", query=query, top_k=top_k, collection=collection)
+        return run(
+            action="search",
+            query=query,
+            top_k=top_k,
+            min_score=min_score,
+            collection=collection,
+        )
