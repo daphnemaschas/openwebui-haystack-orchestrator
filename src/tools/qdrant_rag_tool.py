@@ -1,3 +1,4 @@
+import http.client
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,121 @@ def get_env(name: str, default: str) -> str:
     if value is None or value.strip() == "":
         return default
     return value
+
+
+def _running_in_docker() -> bool:
+    if os.path.exists("/.dockerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup", "r", encoding="utf-8", errors="ignore") as handle:
+            return any("docker" in line or "containerd" in line for line in handle)
+    except OSError:
+        return False
+
+
+def _qdrant_candidates() -> List[str]:
+    env_url = os.getenv("QDRANT_URL", "").strip()
+    if env_url:
+        return [
+            env_url,
+            "http://localhost:6334",
+            "http://127.0.0.1:6334",
+            "http://host.docker.internal:6334",
+            "http://host.docker.internal:6333",
+            "http://qdrant:6333",
+            "http://localhost:6333",
+        ]
+
+    if _running_in_docker():
+        return [
+            "http://qdrant:6333",
+            "http://host.docker.internal:6333",
+            "http://host.docker.internal:6334",
+            "http://localhost:6334",
+            "http://localhost:6333",
+            "http://127.0.0.1:6334",
+        ]
+
+    return [
+        "http://localhost:6334",
+        "http://127.0.0.1:6334",
+        "http://host.docker.internal:6334",
+        "http://host.docker.internal:6333",
+        "http://localhost:6333",
+        "http://qdrant:6333",
+    ]
+
+
+def _resolve_qdrant_url() -> str:
+    """Resolve a reachable Qdrant URL for both OpenWebUI and local CLI runs."""
+    env_url = os.getenv("QDRANT_URL", "").strip()
+    candidates = _qdrant_candidates()
+
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            _get_json(f"{candidate.rstrip('/')}/collections", timeout=3)
+            return candidate
+        except Exception:
+            continue
+
+    return env_url or "http://localhost:6334"
+
+
+def _ollama_candidates() -> List[str]:
+    env_url = os.getenv("OLLAMA_URL", "").strip()
+    if env_url:
+        return [
+            env_url,
+            "http://localhost:11434",
+            "http://127.0.0.1:11434",
+            "http://host.docker.internal:11434",
+        ]
+
+    if _running_in_docker():
+        return [
+            "http://host.docker.internal:11434",
+            "http://localhost:11434",
+            "http://127.0.0.1:11434",
+        ]
+
+    return [
+        "http://localhost:11434",
+        "http://127.0.0.1:11434",
+        "http://host.docker.internal:11434",
+    ]
+
+
+def _resolve_ollama_url() -> str:
+    """Resolve a reachable Ollama URL for both OpenWebUI and local CLI runs."""
+    env_url = os.getenv("OLLAMA_URL", "").strip()
+    candidates = _ollama_candidates()
+
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            _get_json(f"{candidate.rstrip('/')}/api/version", timeout=3)
+            return candidate
+        except Exception:
+            continue
+
+    return env_url or "http://localhost:11434"
+
+
+def _probe_url(url: str, path: str) -> str:
+    try:
+        _get_json(f"{url.rstrip('/')}/{path.lstrip('/')}", timeout=3)
+        return "ok"
+    except http.client.BadStatusLine:
+        return "BadStatusLine: likely gRPC/TLS on this port (not REST)"
+    except Exception as exc:
+        return f"{type(exc).__name__}: {exc}"
 
 
 def _post_json(url: str, payload: dict, timeout: int = 30) -> dict:
@@ -158,8 +274,8 @@ def run(
         top_k: Number of results for search.
         collection: Qdrant collection name.
     """
-    qdrant_url = get_env("QDRANT_URL", "http://localhost:6333")
-    ollama_url = get_env("OLLAMA_URL", "http://localhost:11434")
+    qdrant_url = _resolve_qdrant_url()
+    ollama_url = _resolve_ollama_url()
     embed_model = get_env("OLLAMA_EMBED_MODEL", DEFAULT_EMBED_MODEL)
     collection = get_env("QDRANT_COLLECTION", collection)
 
@@ -239,6 +355,16 @@ def run(
 
 
 class Tools:
+    def debug_endpoints(self) -> str:
+        """Return connectivity diagnostics for Qdrant and Ollama endpoints."""
+        qdrant_lines = [
+            f"{url} -> {_probe_url(url, 'collections')}" for url in _qdrant_candidates()
+        ]
+        ollama_lines = [
+            f"{url} -> {_probe_url(url, 'api/version')}" for url in _ollama_candidates()
+        ]
+        return "Qdrant endpoints:\n" + "\n".join(qdrant_lines) + "\n\nOllama endpoints:\n" + "\n".join(ollama_lines)
+
     def ingest_report(
         self,
         source_url: Optional[str] = None,
