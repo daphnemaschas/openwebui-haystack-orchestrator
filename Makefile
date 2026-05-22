@@ -6,45 +6,36 @@ install:
 	uv sync
 
 ########################################################################################################################
-# Quality checks
-########################################################################################################################
-
-test:
-	uv run pytest tests --cov src --cov-report term --cov-report=html --cov-report xml --junit-xml=tests-results.xml
-
-format-check:
-	uv run ruff format --check src tests
-
-format-fix:
-	uv run ruff format src tests
-
-lint-check:
-	uv run ruff check src tests
-
-lint-fix:
-	uv run ruff check src tests --fix
-
-type-check:
-	uv run mypy src
-
-########################################################################################################################
-# Api
-########################################################################################################################
-
-start-api:
-	docker compose up -d
-
-########################################################################################################################
-# Streamlit
-########################################################################################################################
-
-start-streamlit-app:
-	uv run streamlit run "src/streamlit_app/🏠_Home_page.py"
-
-
-########################################################################################################################
 # OpenWebUI
 ########################################################################################################################
 
-start-app-local:
-	uv run uvicorn src.openwebui-haystack-orchestrator.main:app --port 1416 --reload
+start-ui:
+	@echo "Lancement d'OpenWebUI sur http://localhost:3000..."
+	docker compose up -d
+	@echo "OpenWebUI est pret."
+
+stop-ui:
+	@echo "Arret d'OpenWebUI..."
+	docker compose down
+
+logs-ui:
+	docker compose logs -f
+
+start:
+	./start.sh
+
+restart-ui:
+	@echo "Recreation du service OpenWebUI..."
+	docker compose up -d --force-recreate openwebui
+
+########################################################################################################################
+# Qdrant RAG (CLI helpers)
+########################################################################################################################
+
+ingest-file:
+	@if [ -z "$(FILE)" ]; then echo "Usage: make ingest-file FILE=data/rapport.txt [TITLE=...]"; exit 1; fi
+	uv run python -c 'import os; from src.tools.qdrant_rag_tool import run; print(run(action="ingest", file_path=os.environ.get("FILE"), title=os.environ.get("TITLE")))'
+
+search-rag:
+	@if [ -z "$(QUERY)" ]; then echo "Usage: make search-rag QUERY='...'"; exit 1; fi
+	uv run python -c 'import os; from src.tools.qdrant_rag_tool import run; print(run(action="search", query=os.environ.get("QUERY"), top_k=int(os.environ.get("TOP_K", "3"))))'
