@@ -25,7 +25,7 @@ The pipe reads these environment variables (from the OpenWebUI container):
 - `OLLAMA_URL` (default: http://localhost:11434)
 - `OLLAMA_MODEL` (default: gemma4:e2b)
 - `OLLAMA_EMBED_MODEL` (default: nomic-embed-text)
-- `QDRANT_URL` (default: http://qdrant:6333)
+- `QDRANT_URL` (default: http://qdrant:6333 inside Docker, http://localhost:6334 on the host)
 - `QDRANT_COLLECTION` (default: datagouv_reports)
 
 You can also override them directly in [docker-compose.yml](docker-compose.yml).

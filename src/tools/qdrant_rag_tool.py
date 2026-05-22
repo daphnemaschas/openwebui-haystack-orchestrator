@@ -174,3 +174,32 @@ def run(
     upsert_url = f"{qdrant_url.rstrip('/')}/collections/{urllib.parse.quote(collection)}/points?wait=true"
     _post_json(upsert_url, {"points": points}, timeout=60)
     return f"Ingested {len(points)} chunks into {collection}."
+
+
+class Tools:
+    def ingest_report(
+        self,
+        source_url: Optional[str] = None,
+        file_path: Optional[str] = None,
+        text: Optional[str] = None,
+        title: Optional[str] = None,
+        collection: str = DEFAULT_COLLECTION,
+    ) -> str:
+        """Ingest a report into Qdrant for later retrieval."""
+        return run(
+            action="ingest",
+            source_url=source_url,
+            file_path=file_path,
+            text=text,
+            title=title,
+            collection=collection,
+        )
+
+    def search_reports(
+        self,
+        query: str,
+        top_k: int = 3,
+        collection: str = DEFAULT_COLLECTION,
+    ) -> str:
+        """Search ingested reports in Qdrant using an Ollama embedding query."""
+        return run(action="search", query=query, top_k=top_k, collection=collection)
