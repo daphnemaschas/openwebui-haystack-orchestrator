@@ -8,7 +8,7 @@ services:
       OLLAMA_MODEL: "gemma4:e2b"
     volumes:
       - open-webui:/app/backend/data
-      - ./openwebui/pipes:/app/backend/data/pipelines
+      - ./pipelines/src:/app/backend/data/pipelines
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

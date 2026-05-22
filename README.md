@@ -1,7 +1,7 @@
-## OpenWebUI + Ollama (pipe local)
+## PoC Haystack OpenWebUI
 
-This repo keeps a single OpenWebUI pipe that forwards chat messages to Ollama.
-There is no separate API server or Haystack pipeline.
+This repo provides a minimal OpenWebUI setup with a local Ollama-backed pipe.
+The pipe lives in [pipelines/src/agent_wrapper.py](pipelines/src/agent_wrapper.py) and is mounted into OpenWebUI.
 
 ### Requirements
 
@@ -11,7 +11,7 @@ There is no separate API server or Haystack pipeline.
 ### Quick start
 
 ```bash
-docker compose up -d
+./start.sh
 ```
 
 Then open http://localhost:3000 and use the OpenWebUI pipe.

@@ -1,0 +1,4 @@
+name: router_agent
+version: 0.1.0
+kind: openwebui-pipe
+entrypoint: ../src/agent_wrapper.py
