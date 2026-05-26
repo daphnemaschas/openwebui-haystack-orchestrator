@@ -15,7 +15,7 @@ services:
       OLLAMA_URL: "http://host.docker.internal:11434"
       OLLAMA_MODEL: "gemma4:e2b"
     volumes:
-      - ./pipelines/definitions:/app/pipelines/definitions:ro
+      - ./pipelines/definitions:/app/pipelines/definitions
       - ./pipelines/src:/app/pipelines/src
     restart: unless-stopped
     extra_hosts:

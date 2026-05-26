@@ -17,12 +17,16 @@ def build_pipeline() -> Pipeline:
         "Answer:"
     )
 
+    # Bake host/model into the YAML so Hayhooks can reach Ollama from Docker.
+    ollama_host = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
+    ollama_model = os.getenv("OLLAMA_MODEL", "gemma4:e2b")
+
     pipeline = Pipeline()
     pipeline.add_component(
         "prompt_builder",
         PromptBuilder(template=template, required_variables=["query"]),
     )
-    pipeline.add_component("llm", OllamaGenerator())
+    pipeline.add_component("llm", OllamaGenerator(host=ollama_host, model=ollama_model))
     pipeline.connect("prompt_builder", "llm")
     return pipeline
 
