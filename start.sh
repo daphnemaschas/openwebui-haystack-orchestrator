@@ -4,11 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PIPE_DIR="$ROOT_DIR/pipelines/src"
-if [[ ! -f "$PIPE_DIR/agent_wrapper.py" ]]; then
-  echo "Missing $PIPE_DIR/agent_wrapper.py" >&2
+BUILD_SCRIPT="$PIPE_DIR/build_agent.py"
+if [[ ! -f "$BUILD_SCRIPT" ]]; then
+  echo "Missing $BUILD_SCRIPT" >&2
   exit 1
 fi
 
+uv run python "$BUILD_SCRIPT"
 docker compose up -d
 
-echo "OpenWebUI is running at http://localhost:3000"
+echo "Hayhooks is running at http://localhost:1416"
+echo "Chainlit is running at http://localhost:8000"

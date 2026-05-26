@@ -14,3 +14,9 @@ wheels/
 
 # Local data
 data/
+
+# Chainlit
+.chainlit/
+
+# Generated pipeline YAMLs
+pipelines/definitions/*.yaml

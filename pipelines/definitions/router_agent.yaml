@@ -1,4 +1,28 @@
-name: router_agent
-version: 0.1.0
-kind: openwebui-pipe
-entrypoint: ../src/agent_wrapper.py
+components:
+  llm:
+    init_parameters:
+      host: http://localhost:11434
+      model: gemma4:e2b
+      system_prompt: null
+    type: ollama_generator.OllamaGenerator
+  prompt_builder:
+    init_parameters:
+      required_variables:
+      - query
+      template: 'You are a helpful assistant.
+
+        Question: {{query}}
+
+        Answer:'
+      variables: null
+    type: haystack.components.builders.prompt_builder.PromptBuilder
+connection_type_validation: true
+connections:
+- receiver: llm.prompt
+  sender: prompt_builder.prompt
+max_runs_per_component: 100
+metadata: {}
+inputs:
+  query: prompt_builder.query
+outputs:
+  replies: llm.replies
