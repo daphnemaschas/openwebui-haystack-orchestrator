@@ -22,7 +22,17 @@ async def on_message(message: cl.Message) -> None:
         await cl.Message(content=f"Request failed: {exc}").send()
         return
 
-    replies = data.get("replies")
+    replies = None
+
+    if isinstance(data, dict):
+        replies = data.get("replies")
+        if replies is None:
+            result = data.get("result")
+            if isinstance(result, dict):
+                llm = result.get("llm")
+                if isinstance(llm, dict):
+                    replies = llm.get("replies")
+
     if isinstance(replies, list) and replies:
         content = replies[0]
     else:
