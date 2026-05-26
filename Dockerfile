@@ -5,6 +5,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock /app/
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 RUN uv sync --frozen --no-dev
 
 ENV HAYHOOKS_HOST=0.0.0.0
