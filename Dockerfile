@@ -2,10 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock README.md /app/
-COPY pipelines/src /app/pipelines/src
+RUN pip install --no-cache-dir uv
 
-RUN pip install --no-cache-dir --upgrade pip uv \
-    && uv sync --frozen --no-dev
+COPY pyproject.toml uv.lock /app/
+RUN uv sync --frozen --no-dev
 
-CMD ["python", "-c", "print('This image is optional; use docker compose up for OpenWebUI.')"]
+ENV HAYHOOKS_HOST=0.0.0.0
+ENV HAYHOOKS_PORT=1416
+ENV HAYHOOKS_PIPELINES_DIR=/app/pipelines/definitions
+
+EXPOSE 1416
+
+CMD ["hayhooks", "run", "--host", "0.0.0.0", "--port", "1416"]
