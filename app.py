@@ -115,6 +115,12 @@ async def on_message(message: cl.Message) -> None:
         parsed = _call_llm(messages)
         action = parsed.get("action")
 
+        # Trace router decision
+        if action == "tool":
+            tool_name = parsed.get("tool_name")
+            tool_args = parsed.get("tool_args") or {}
+            await cl.Message(content=f"Router: {tool_name}({json.dumps(tool_args, ensure_ascii=False)})").send()
+
         if action == "final":
             final_text = parsed.get("final") or ""
             await cl.Message(content=final_text).send()
@@ -142,12 +148,13 @@ async def on_message(message: cl.Message) -> None:
                 result = f"Tool error: {exc}"
             step.output = result
 
+        # Feed back the observation as user message for next LLM step
         messages.append(
             {
                 "role": "user",
                 "content": (
                     f"Observation from tool {tool_name}:\n{result}\n\n"
-                    "Decide the next action. Return ONLY JSON with either a tool call or a final answer."
+                    "If you have not found a relevant answer, you MUST try another tool call or rephrase the query. Only return a final answer if you are sure. Return ONLY JSON with either a tool call or a final answer."
                 ),
             }
         )
