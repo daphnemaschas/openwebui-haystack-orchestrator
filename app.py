@@ -10,7 +10,7 @@ from src.tools.qdrant_rag_tool import Tools as QdrantTools
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e2b")
-MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "4"))
+MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "6"))
 
 
 DATAGOUV_TOOLS = DataGouvTools()
@@ -93,6 +93,44 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _normalize_decision(parsed: Dict[str, Any], raw_content: str) -> Dict[str, Any]:
+    action = parsed.get("action")
+
+    # Accept common aliases that models sometimes output.
+    if not action and parsed.get("tool_name"):
+        action = "tool"
+    if not action and ("final" in parsed or "answer" in parsed or "response" in parsed):
+        action = "final"
+
+    if action == "tool":
+        tool_name = parsed.get("tool_name") or parsed.get("tool") or parsed.get("name")
+        tool_args = parsed.get("tool_args") or parsed.get("args") or {}
+        if isinstance(tool_args, str):
+            try:
+                tool_args = json.loads(tool_args)
+            except json.JSONDecodeError:
+                tool_args = {}
+        if not isinstance(tool_args, dict):
+            tool_args = {}
+        return {
+            "action": "tool",
+            "tool_name": tool_name,
+            "tool_args": tool_args,
+            "raw": raw_content,
+        }
+
+    if action == "final":
+        final_text = (
+            parsed.get("final")
+            or parsed.get("answer")
+            or parsed.get("response")
+            or raw_content
+        )
+        return {"action": "final", "final": str(final_text), "raw": raw_content}
+
+    return {"action": "invalid", "raw": raw_content}
+
+
 def _call_llm(messages: list) -> Dict[str, Any]:
     client = ollama.Client(host=OLLAMA_URL)
     response = client.chat(model=OLLAMA_MODEL, messages=messages)
@@ -100,8 +138,8 @@ def _call_llm(messages: list) -> Dict[str, Any]:
     content = message.get("content") or ""
     parsed = _extract_json(content)
     if not parsed:
-        return {"action": "final", "final": content}
-    return parsed
+        return {"action": "invalid", "raw": content}
+    return _normalize_decision(parsed, content)
 
 
 @cl.on_message
@@ -110,6 +148,8 @@ async def on_message(message: cl.Message) -> None:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": message.content},
     ]
+
+    invalid_attempts = 0
 
     for step_index in range(1, MAX_STEPS + 1):
         parsed = _call_llm(messages)
@@ -127,10 +167,42 @@ async def on_message(message: cl.Message) -> None:
             return
 
         if action != "tool":
-            await cl.Message(content="Invalid action. Please try again.").send()
-            return
+            invalid_attempts += 1
+            if invalid_attempts >= 2:
+                raw = (parsed.get("raw") or "").strip()
+                if raw:
+                    await cl.Message(content=raw).send()
+                else:
+                    await cl.Message(content="Je n'ai pas pu produire une action valide. Reformule la demande.").send()
+                return
+
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Your previous output was invalid. Return ONLY valid JSON with either: "
+                        "{\"action\":\"tool\",\"tool_name\":\"...\",\"tool_args\":{...}} "
+                        "or {\"action\":\"final\",\"final\":\"...\"}."
+                    ),
+                }
+            )
+            continue
+
+        invalid_attempts = 0
 
         tool_name = parsed.get("tool_name")
+        if not isinstance(tool_name, str) or not tool_name:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Tool call is missing a valid tool_name string. "
+                        "Return a corrected JSON tool call or a final answer."
+                    ),
+                }
+            )
+            continue
+
         tool_args = parsed.get("tool_args") or {}
         tool_meta = TOOLS.get(tool_name)
 
