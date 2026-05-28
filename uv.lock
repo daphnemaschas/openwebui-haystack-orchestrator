@@ -2974,6 +2974,7 @@ name = "openwebui-haystack-orchestrator"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "chainlit" },
     { name = "fastapi" },
     { name = "fastembed-haystack" },
     { name = "hayhooks", extra = ["chainlit"] },
@@ -2984,8 +2985,10 @@ dependencies = [
     { name = "pypdf" },
     { name = "pytest" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "qdrant-client" },
     { name = "qdrant-haystack" },
+    { name = "requests" },
     { name = "ruff" },
     { name = "sentence-transformers" },
     { name = "uvicorn" },
@@ -2993,6 +2996,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "chainlit", specifier = ">=1.0.0" },
     { name = "fastapi", specifier = ">=0.136.1" },
     { name = "fastembed-haystack", specifier = ">=2.3.0" },
     { name = "hayhooks", extras = ["chainlit"], specifier = ">=1.19.1" },
@@ -3003,8 +3007,10 @@ requires-dist = [
     { name = "pypdf", specifier = ">=5.4.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "qdrant-client", specifier = ">=1.18.0" },
     { name = "qdrant-haystack", specifier = ">=10.3.0" },
+    { name = "requests", specifier = ">=2.32.0" },
     { name = "ruff", specifier = ">=0.15.13" },
     { name = "sentence-transformers", specifier = ">=5.5.1" },
     { name = "uvicorn", specifier = ">=0.47.0" },
