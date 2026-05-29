@@ -1,3 +1,5 @@
+"""Tools for querying data.gouv.fr datasets and files."""
+
 import json
 import urllib.request
 import urllib.parse
@@ -5,12 +7,16 @@ import urllib.error
 
 
 class Tools:
+    """Data.gouv.fr helper tools for dataset discovery and file access."""
+
     def search_data_gouv_datasets(self, query: str) -> str:
-        """
-        DESCRIPTION: Use this tool to automatically search for public data, statistics, or files on data.gouv.fr.
+        """Search datasets on data.gouv.fr by keywords.
 
         Args:
-            query: Search keywords (e.g., “water quality testing”).
+            query: Search keywords (for example, "water quality testing").
+
+        Returns:
+            A formatted list of dataset IDs and titles, or an error message.
         """
         url = f"https://www.data.gouv.fr/api/1/datasets/?q={urllib.parse.quote(query)}&page_size=5"
         try:
@@ -29,11 +35,13 @@ class Tools:
             return f"Erreur de recherche: {e}"
 
     def list_dataset_files(self, dataset_id: str) -> str:
-        """
-        Lists the CSV or text files in a dataset. Must be used after retrieving the dataset ID.
+        """List CSV or text files for a dataset ID.
 
         Args:
-            dataset_id: The identifier (dataset ID) of the dataset retrieved during the search.
+            dataset_id: Dataset identifier returned by search.
+
+        Returns:
+            A formatted list of file URLs and metadata, or an error message.
         """
         url = (
             f"https://www.data.gouv.fr/api/1/datasets/{urllib.parse.quote(dataset_id)}/"
@@ -56,11 +64,13 @@ class Tools:
             return f"Erreur lors de la récupération des fichiers: {e}"
 
     def read_file_content(self, file_url: str) -> str:
-        """
-        Reads the text content or raw data (the first few lines) from a CSV or text file.
+        """Read the first chunk of a CSV or text file by URL.
 
         Args:
-            file_url: The exact URL of the file to read (retrieved using the list_dataset_files tool).
+            file_url: Direct file URL from data.gouv.fr.
+
+        Returns:
+            The initial file contents (truncated) or an error message.
         """
         try:
             req = urllib.request.Request(
