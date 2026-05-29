@@ -562,9 +562,6 @@ class Tools:
     ) -> str:
         """Search the RAG corpus stored in Qdrant.
 
-        CRITICAL: ALWAYS use this tool when the user asks a question about
-        the CESEDA, immigration laws, ANEF, or residence cards.
-
         Args:
             query: Specific question to search for.
             top_k: Number of results to return (defaults to 3).
