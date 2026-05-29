@@ -1,3 +1,5 @@
+"""Chainlit app that routes user requests to tools or LLM responses."""
+
 import json
 import os
 from typing import Any, Dict, Optional
@@ -57,6 +59,11 @@ TOOLS: Dict[str, Dict[str, Any]] = {
 
 
 def _tool_list_prompt() -> str:
+    """Render tool metadata into a prompt-friendly list.
+
+    Returns:
+        A newline-joined string describing the available tools and args.
+    """
     lines = []
     for name, meta in TOOLS.items():
         args = ", ".join(f"{key}:{value}" for key, value in meta["args"].items())
@@ -78,6 +85,14 @@ SYSTEM_PROMPT = (
 
 
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
+    """Extract a JSON object from raw model output.
+
+    Args:
+        text: Raw text returned by the model.
+
+    Returns:
+        Parsed JSON as a dict, or None if no valid object is found.
+    """
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -94,6 +109,15 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
 
 
 def _normalize_decision(parsed: Dict[str, Any], raw_content: str) -> Dict[str, Any]:
+    """Normalize a model decision into the expected action schema.
+
+    Args:
+        parsed: Parsed JSON from the model output.
+        raw_content: Original raw content returned by the model.
+
+    Returns:
+        A normalized dict with "action" and related fields.
+    """
     action = parsed.get("action")
 
     # Accept common aliases that models sometimes output.
@@ -132,6 +156,14 @@ def _normalize_decision(parsed: Dict[str, Any], raw_content: str) -> Dict[str, A
 
 
 def _call_llm(messages: list) -> Dict[str, Any]:
+    """Call Ollama and normalize the agent decision.
+
+    Args:
+        messages: List of chat messages to send to the model.
+
+    Returns:
+        A normalized decision dict describing the next action.
+    """
     client = ollama.Client(host=OLLAMA_URL)
     response = client.chat(model=OLLAMA_MODEL, messages=messages)
     message = response.get("message", {})
@@ -144,6 +176,11 @@ def _call_llm(messages: list) -> Dict[str, Any]:
 
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
+    """Handle incoming user messages with a tool-using loop.
+
+    Args:
+        message: Chainlit message containing the user request.
+    """
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": message.content},
@@ -155,7 +192,6 @@ async def on_message(message: cl.Message) -> None:
         parsed = _call_llm(messages)
         action = parsed.get("action")
 
-        # Trace router decision
         if action == "tool":
             tool_name = parsed.get("tool_name")
             tool_args = parsed.get("tool_args") or {}

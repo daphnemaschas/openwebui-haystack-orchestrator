@@ -1,3 +1,5 @@
+"""Qdrant-backed RAG utilities with Ollama embeddings."""
+
 import http.client
 import json
 import os
@@ -12,6 +14,15 @@ DEFAULT_COLLECTION = "datagouv_reports"
 DEFAULT_EMBED_MODEL = "nomic-embed-text"
 
 def get_env(name: str, default: str) -> str:
+    """Return an environment variable or a default fallback.
+
+    Args:
+        name: Environment variable name.
+        default: Fallback value when unset or blank.
+
+    Returns:
+        The resolved environment value.
+    """
     value = os.getenv(name)
     if value is None or value.strip() == "":
         return default
@@ -19,6 +30,11 @@ def get_env(name: str, default: str) -> str:
 
 
 def _running_in_docker() -> bool:
+    """Check whether the process is running in a Docker container.
+
+    Returns:
+        True if Docker or containerd markers are detected.
+    """
     if os.path.exists("/.dockerenv"):
         return True
     try:
@@ -29,6 +45,11 @@ def _running_in_docker() -> bool:
 
 
 def _qdrant_candidates() -> List[str]:
+    """Build a list of candidate Qdrant endpoints.
+
+    Returns:
+        Ordered list of URLs to probe.
+    """
     env_url = os.getenv("QDRANT_URL", "").strip()
     if env_url:
         return [
@@ -62,7 +83,11 @@ def _qdrant_candidates() -> List[str]:
 
 
 def _resolve_qdrant_url() -> str:
-    """Resolve a reachable Qdrant URL for both OpenWebUI and local CLI runs."""
+    """Resolve a reachable Qdrant URL for local and container runs.
+
+    Returns:
+        The first reachable Qdrant URL, or a fallback.
+    """
     env_url = os.getenv("QDRANT_URL", "").strip()
     candidates = _qdrant_candidates()
 
@@ -81,6 +106,11 @@ def _resolve_qdrant_url() -> str:
 
 
 def _ollama_candidates() -> List[str]:
+    """Build a list of candidate Ollama endpoints.
+    
+    Returns:
+        Ordered list of URLs to probe.
+    """
     env_url = os.getenv("OLLAMA_URL", "").strip()
     if env_url:
         return [
@@ -105,7 +135,11 @@ def _ollama_candidates() -> List[str]:
 
 
 def _resolve_ollama_url() -> str:
-    """Resolve a reachable Ollama URL for both OpenWebUI and local CLI runs."""
+    """Resolve a reachable Ollama URL for local and container runs.
+
+    Returns:
+        The first reachable Ollama URL, or a fallback.
+    """
     env_url = os.getenv("OLLAMA_URL", "").strip()
     candidates = _ollama_candidates()
 
@@ -124,6 +158,15 @@ def _resolve_ollama_url() -> str:
 
 
 def _probe_url(url: str, path: str) -> str:
+    """Probe a REST endpoint for availability.
+
+    Args:
+        url: Base URL to check.
+        path: Path segment to request.
+
+    Returns:
+        "ok" on success or a descriptive error string.
+    """
     try:
         _get_json(f"{url.rstrip('/')}/{path.lstrip('/')}", timeout=3)
         return "ok"
@@ -134,6 +177,16 @@ def _probe_url(url: str, path: str) -> str:
 
 
 def _post_json(url: str, payload: dict, timeout: int = 30) -> dict:
+    """Send a POST request with a JSON payload.
+
+    Args:
+        url: Destination URL.
+        payload: JSON-serializable payload.
+        timeout: Request timeout in seconds.
+
+    Returns:
+        Parsed JSON response.
+    """
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -141,6 +194,16 @@ def _post_json(url: str, payload: dict, timeout: int = 30) -> dict:
 
 
 def _put_json(url: str, payload: dict, timeout: int = 30) -> dict:
+    """Send a PUT request with a JSON payload.
+
+    Args:
+        url: Destination URL.
+        payload: JSON-serializable payload.
+        timeout: Request timeout in seconds.
+
+    Returns:
+        Parsed JSON response.
+    """
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -153,11 +216,34 @@ def _put_json(url: str, payload: dict, timeout: int = 30) -> dict:
 
 
 def _get_json(url: str, timeout: int = 20) -> dict:
+    """Fetch JSON from a URL.
+
+    Args:
+        url: Destination URL.
+        timeout: Request timeout in seconds.
+
+    Returns:
+        Parsed JSON response.
+    """
     with urllib.request.urlopen(url, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def _ollama_embed(text: str, ollama_url: str, model: str) -> List[float]:
+    """Create an embedding for text using Ollama.
+
+    Args:
+        text: Input text to embed.
+        ollama_url: Base URL of the Ollama server.
+        model: Embedding model name.
+
+    Returns:
+        Embedding vector as a list of floats.
+
+    Raises:
+        RuntimeError: If the model is missing or incompatible.
+        ValueError: If the response lacks an embedding.
+    """
     url = f"{ollama_url.rstrip('/')}/api/embeddings"
     payload = {"model": model, "prompt": text}
     try:
@@ -184,6 +270,13 @@ def _ollama_embed(text: str, ollama_url: str, model: str) -> List[float]:
 
 
 def _ensure_collection(qdrant_url: str, collection: str, vector_size: int) -> None:
+    """Create a Qdrant collection if it does not exist.
+
+    Args:
+        qdrant_url: Base URL of Qdrant.
+        collection: Collection name.
+        vector_size: Size of vectors stored in the collection.
+    """
     url = f"{qdrant_url.rstrip('/')}/collections/{urllib.parse.quote(collection)}"
     try:
         _get_json(url)
@@ -202,6 +295,15 @@ def _ensure_collection(qdrant_url: str, collection: str, vector_size: int) -> No
 
 
 def _chunk_text(text: str, max_chars: int = 1200) -> Iterable[str]:
+    """Split text into chunks suitable for embedding.
+
+    Args:
+        text: Raw text to chunk.
+        max_chars: Maximum chunk size in characters.
+
+    Returns:
+        Iterable of chunk strings.
+    """
     if not text:
         return []
 
@@ -225,6 +327,15 @@ def _chunk_text(text: str, max_chars: int = 1200) -> Iterable[str]:
 
 
 def _keyword_score(query: str, text: str) -> int:
+    """Compute a simple keyword overlap score.
+
+    Args:
+        query: Search query.
+        text: Candidate text to score.
+
+    Returns:
+        Integer count of matched query terms.
+    """
     terms = [t for t in query.lower().split() if len(t) > 2]
     if not terms:
         return 0
@@ -233,12 +344,33 @@ def _keyword_score(query: str, text: str) -> int:
 
 
 def _fetch_source_text(source_url: str, max_chars: int = 200000) -> str:
+    """Fetch and truncate text from a remote URL.
+
+    Args:
+        source_url: URL to fetch content from.
+        max_chars: Maximum characters to return.
+
+    Returns:
+        Truncated text content.
+    """
     with urllib.request.urlopen(source_url, timeout=30) as response:
         content = response.read().decode("utf-8", errors="replace")
     return content[:max_chars]
 
 
 def _read_local_file(file_path: str, max_chars: int = 200000) -> str:
+    """Read and truncate a local file or PDF.
+
+    Args:
+        file_path: Path to the local file.
+        max_chars: Maximum characters to return.
+
+    Returns:
+        Extracted text content.
+
+    Raises:
+        RuntimeError: If PDF support is missing.
+    """
     path = Path(file_path)
     if path.suffix.lower() == ".pdf":
         try:
@@ -277,12 +409,15 @@ def run(
         action: "ingest" to upload, "search" to query.
         query: Search query (required for action=search).
         source_url: URL to fetch text from (optional for ingest).
-        file_path: Local path readable by the OpenWebUI container (optional for ingest).
+        file_path: Local path readable by the container (optional for ingest).
         text: Raw text to ingest (optional for ingest).
         title: Optional title stored in metadata.
         top_k: Number of results for search.
         min_score: Optional Qdrant score threshold.
         collection: Qdrant collection name.
+
+    Returns:
+        A human-readable result string.
     """
     qdrant_url = _resolve_qdrant_url()
     ollama_url = _resolve_ollama_url()
@@ -373,8 +508,14 @@ def run(
 
 
 class Tools:
+    """Tool wrapper exposing Qdrant ingestion and search helpers."""
+
     def debug_endpoints(self) -> str:
-        """Return connectivity diagnostics for Qdrant and Ollama endpoints."""
+        """Return connectivity diagnostics for Qdrant and Ollama endpoints.
+
+        Returns:
+            A formatted status report of candidate endpoints.
+        """
         qdrant_lines = [
             f"{url} -> {_probe_url(url, 'collections')}" for url in _qdrant_candidates()
         ]
@@ -391,7 +532,18 @@ class Tools:
         title: Optional[str] = None,
         collection: str = DEFAULT_COLLECTION,
     ) -> str:
-        """Ingest a report into Qdrant for later retrieval."""
+        """Ingest a report into Qdrant for later retrieval.
+
+        Args:
+            source_url: Remote URL to ingest.
+            file_path: Local file path to ingest.
+            text: Raw text to ingest.
+            title: Optional title stored in metadata.
+            collection: Qdrant collection name.
+
+        Returns:
+            A summary of ingestion results.
+        """
         return run(
             action="ingest",
             source_url=source_url,
@@ -408,15 +560,16 @@ class Tools:
         min_score: Optional[float] = None,
         collection: str = DEFAULT_COLLECTION,
     ) -> str:
-        """
-        CRITICAL: ALWAYS use this tool when the user asks a question about the CESEDA, immigration laws, ANEF, or residence cards (cartes de résident).
-        This tool searches the official legal database (Qdrant) which already contains all the necessary reports.
-        
+        """Search the RAG corpus stored in Qdrant.
+
         Args:
-            query: The specific question to search for (e.g., "motif ANEF renouvellement carte de résident").
-            top_k: Number of results to return (default to 3).
+            query: Specific question to search for.
+            top_k: Number of results to return (defaults to 3).
             min_score: Optional Qdrant score threshold.
-            collection: Leave as default unless specified.
+            collection: Qdrant collection name.
+
+        Returns:
+            A formatted list of matching passages.
         """
         return run(
             action="search",
